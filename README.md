@@ -48,5 +48,10 @@ services.AddHostedServices<SettingsTimedHostedService>();
 Output =>
 
 ```bash
-
+[2024-05-16T20:53:09.7608330Z-Dev-inf]: Ogu.Settings.Services.SettingsTimedHostedService
+                                        Worker will start at: 2024-05-16T20:53:24.7574562Z and occur every 0:00:00:15.0000000 period. Maximum concurrently active jobs: 1
+[2024-05-16T20:53:24.7864910Z-Dev-inf]: Ogu.Settings.Services.SettingsTimedHostedService
+                                        Worker is executing the task
+[2024-05-16T20:53:24.9255878Z-Dev-inf]: Ogu.Settings.Services.SettingsTimedHostedService
+                                        Worker has executed the task in 134.811ms, next task at: 2024-05-16T20:53:39.9215909Z
 ```
