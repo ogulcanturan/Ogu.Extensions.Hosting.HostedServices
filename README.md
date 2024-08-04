@@ -1,4 +1,4 @@
-# Ogu.Extensions.Hosting.HostedServices
+# <img src="logo/ogu-logo.png" alt="Header" width="24"/> Ogu.Extensions.Hosting.HostedServices
 
 [![.NET](https://github.com/ogulcanturan/Ogu.Extensions.Hosting.HostedServices/actions/workflows/dotnet.yml/badge.svg?branch=master)](https://github.com/ogulcanturan/Ogu.Extensions.Hosting.HostedServices/actions/workflows/dotnet.yml)
 [![NuGet](https://img.shields.io/nuget/v/Ogu.Extensions.Hosting.HostedServices.svg?color=1ecf18)](https://nuget.org/packages/Ogu.Extensions.Hosting.HostedServices)
