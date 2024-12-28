@@ -8,6 +8,11 @@ using System.Threading.Tasks;
 
 namespace Ogu.Extensions.Hosting.HostedServices
 {
+    /// <summary>
+    ///     Represents a background service that executes tasks at regular, timed intervals.
+    ///     Implements <see cref="IHostedService"/> to provide background task execution
+    ///     and <see cref="IDisposable"/> for proper cleanup of resources.
+    /// </summary>
     public class TimedHostedService : IHostedService, IDisposable
     {
         private Timer _timer;

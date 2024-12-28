@@ -5,6 +5,10 @@ using System.Threading.Tasks;
 
 namespace Ogu.Extensions.Hosting.HostedServices
 {
+    /// <summary>
+    ///     A concrete implementation of the <see cref="ITaskQueue"/> interface.
+    ///     Manages the queuing and dequeuing of tasks to be executed asynchronously.
+    /// </summary>
     public sealed class TaskQueue : ITaskQueue
     {
         private readonly Channel<Func<CancellationToken, ValueTask>> _queue;

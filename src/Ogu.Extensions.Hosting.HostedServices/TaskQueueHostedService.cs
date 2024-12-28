@@ -8,6 +8,10 @@ using System.Threading.Tasks;
 
 namespace Ogu.Extensions.Hosting.HostedServices
 {
+    /// <summary>
+    ///     A background service that processes tasks from a queue asynchronously.
+    ///     Implements <see cref="IHostedService"/> to run as a hosted service and manage task execution from the queue.
+    /// </summary>
     public class TaskQueueHostedService : IHostedService
     {
         private Task _executingTask;

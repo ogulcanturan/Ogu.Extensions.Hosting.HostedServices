@@ -2,6 +2,9 @@
 
 namespace Ogu.Extensions.Hosting.HostedServices
 {
+    /// <summary>
+    ///     Represents the configuration options for the QueueHostedService.
+    /// </summary>
     public class TaskQueueHostedServiceOptions
     {
         /// <summary>

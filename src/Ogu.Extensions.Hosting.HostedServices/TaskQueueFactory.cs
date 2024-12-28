@@ -4,7 +4,12 @@ using System.Threading.Channels;
 
 namespace Ogu.Extensions.Hosting.HostedServices
 {
-    public class TaskQueueFactory : ITaskQueueFactory
+    /// <summary>
+    ///     A concrete implementation of the <see cref="ITaskQueueFactory"/> interface.
+    ///     Provides methods for managing and accessing task queues, including creating, retrieving, 
+    ///     and checking the existence of task queues by name.
+    /// </summary>
+    public sealed class TaskQueueFactory : ITaskQueueFactory
     {
         private readonly ConcurrentDictionary<string, ITaskQueue> _queueNameToTaskQueue = new ConcurrentDictionary<string, ITaskQueue>();
 
