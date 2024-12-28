@@ -8,28 +8,25 @@ using System.Threading.Tasks;
 
 namespace Ogu.Extensions.Hosting.HostedServices
 {
-    public abstract class TimedHostedService : IHostedService, IDisposable
+    public class TimedHostedService : IHostedService, IDisposable
     {
-        private int _numberOfActiveJobs;
         private Timer _timer;
         private Task _executingTask;
         private CancellationTokenSource _stoppingCts;
-        private readonly TimeSpan _startsIn;
         private bool _disposed;
-        private readonly int _maximumActiveJobs;
 
-        protected readonly ILogger Logger;
-        protected TimeSpan Period;
-
-        protected TimedHostedService(ILogger logger, TimeSpan period, TimeSpan startsIn = default, int maximumActiveJobs = 1)
+        private readonly SemaphoreSlim _semaphore = new SemaphoreSlim(1, 1);
+        private readonly Func<CancellationToken, ValueTask> _task;
+        private readonly ILogger _logger;
+        private readonly TimedHostedServiceOptions _options;
+        
+        public TimedHostedService(ILogger logger, Func<CancellationToken, ValueTask> task, Action<TimedHostedServiceOptions> options = null)
         {
-            Logger = logger ?? new NullLogger<TimedHostedService>();
-            Period = period;
-            _startsIn = startsIn;
-            _maximumActiveJobs = maximumActiveJobs;
+            _logger = logger ?? new NullLogger<TimedHostedService>();
+            _task = task;
+            _options = new TimedHostedServiceOptions();
+            options?.Invoke(_options);
         }
-
-        protected abstract Task ExecuteAsync(CancellationToken cancellationToken);
 
         public virtual bool IsExecuting { get; private set; }
         public virtual bool HasStarted { get; private set; }
@@ -37,21 +34,20 @@ namespace Ogu.Extensions.Hosting.HostedServices
 
         public virtual Task StartAsync(CancellationToken cancellationToken)
         {
+            InternalLogs.WorkerStartPlanned(_logger, DateTime.UtcNow.Add(_options.StartsIn), _options.Period, null);
+
             HasStarted = true;
 
             _stoppingCts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
 
-            Log.WorkerStarted(Logger, DateTime.UtcNow.Add(_startsIn), Period, _maximumActiveJobs, null);
-
-            _timer = new Timer(x => _executingTask = DoWorkAsync(x, _stoppingCts.Token), null, _startsIn, Period);
+            _timer = new Timer(x => _executingTask = DoWorkAsync(x, _stoppingCts.Token), null, _options.StartsIn, _options.Period);
 
             return Task.CompletedTask;
         }
 
-        // Ref: https://github.com/dotnet/runtime/blob/main/src/libraries/Microsoft.Extensions.Hosting.Abstractions/src/BackgroundService.cs
         public virtual async Task StopAsync(CancellationToken cancellationToken)
         {
-            Log.WorkerStopped(Logger, null);
+            InternalLogs.WorkerStopping(_logger, null);
 
             if (_executingTask == null)
             {
@@ -70,22 +66,19 @@ namespace Ogu.Extensions.Hosting.HostedServices
 #else
                 // Wait until the task completes or the stop token triggers
                 var tcs = new TaskCompletionSource<object>();
-#if NETSTANDARD2_0
+#if !NETSTANDARD2_0
+                await
+#endif
                 using (var registration = cancellationToken.Register(s => ((TaskCompletionSource<object>)s).SetCanceled(), tcs))
                 {
                     // Do not await the _executeTask because cancelling it will throw an OperationCanceledException which we are explicitly ignoring
                     await Task.WhenAny(_executingTask, tcs.Task).ConfigureAwait(false);
                 }
-#else
-                await using (var registration = cancellationToken.Register(s => ((TaskCompletionSource<object>)s).SetCanceled(), tcs))
-                {
-                    // Do not await the _executeTask because cancelling it will throw an OperationCanceledException which we are explicitly ignoring
-                    await Task.WhenAny(_executingTask, tcs.Task).ConfigureAwait(false);
-                }
-#endif
 #endif
                 HasStarted = false;
                 NextTaskAt = null;
+
+                InternalLogs.WorkerStopped(_logger, null);
             }
         }
 
@@ -108,77 +101,79 @@ namespace Ogu.Extensions.Hosting.HostedServices
 
         private async Task DoWorkAsync(object state, CancellationToken cancellationToken)
         {
-            if (_numberOfActiveJobs < _maximumActiveJobs)
+            NextTaskAt = DateTime.UtcNow.Add(_options.Period);
+
+            if (IsExecuting || !await _semaphore.WaitAsync(0, cancellationToken))
             {
-                _numberOfActiveJobs++;
+                InternalLogs.SkippingTask(_logger, null);
 
-                Log.ExecutingTheTask(Logger, null);
-
-                IsExecuting = true;
-
-                var start = Stopwatch.GetTimestamp();
-                long stop;
-
-                try
-                {
-                    await ExecuteAsync(cancellationToken).ConfigureAwait(false);
-                    stop = Stopwatch.GetTimestamp();
-                }
-                catch (Exception ex)
-                {
-                    stop = Stopwatch.GetTimestamp();
-                    Log.ExecuteException(Logger, ex);
-                }
-                finally
-                {
-                    _numberOfActiveJobs--;
-                }
-
-                NextTaskAt = DateTime.UtcNow.Add(Period);
-
-                Log.ExecutedTheTask(Logger, GetElapsedMilliseconds(start, stop), NextTaskAt.Value, null);
-
-                IsExecuting = false;
-            }
-        }
-
-        private static double GetElapsedMilliseconds(long start, long stop) => (stop - start) * 1000 / (double)Stopwatch.Frequency;
-
-        private static class Log
-        {
-            private static class EventIds
-            {
-                public static readonly EventId WorkerStarted = new EventId(1, "WorkerStarted");
-                public static readonly EventId ExecutingTheTask = new EventId(2, "ExecutingTheTask");
-                public static readonly EventId ExecutedTheTask = new EventId(3, "ExecutedTheTask");
-                public static readonly EventId WorkerStopped = new EventId(4, "WorkerStopped");
-                public static readonly EventId ExecuteException = new EventId(5, "ExecuteException");
+                return;
             }
 
-            public static readonly Action<ILogger, DateTime, TimeSpan, int, Exception> WorkerStarted = LoggerMessage.Define<DateTime, TimeSpan, int>(
-                LogLevel.Information,
-                EventIds.WorkerStarted,
-                "Worker will start at: {DateTime:o} and occur every {Period:G} period. Maximum concurrently active jobs: {MaximumActiveJobs}");
+            var taskUniqueId = InternalHelpers.GetTaskUniqueId();
 
-            public static readonly Action<ILogger, Exception> ExecutingTheTask = LoggerMessage.Define(
-                LogLevel.Information,
-                EventIds.ExecutingTheTask,
-                "Worker is executing the task");
+            InternalLogs.TaskStarted(_logger, taskUniqueId, null);
 
-            public static readonly Action<ILogger, double, DateTime, Exception> ExecutedTheTask = LoggerMessage.Define<double, DateTime>(
-                LogLevel.Information,
-                EventIds.ExecutedTheTask,
-                "Worker has executed the task in {Elapsed}ms, next task at: {DateTime:o}");
+            IsExecuting = true;
 
-            public static readonly Action<ILogger, Exception> WorkerStopped = LoggerMessage.Define(
-                LogLevel.Information,
-                EventIds.WorkerStopped,
-                "Worker is stopping...........");
+            long stop;
+            var start = Stopwatch.GetTimestamp();
+            string status;
+            CancellationTokenSource timeoutCts = null;
 
-            public static readonly Action<ILogger, Exception> ExecuteException = LoggerMessage.Define(
-                LogLevel.Error,
-                EventIds.ExecuteException,
-                "Worker caught an exception while executing the task!");
+            try
+            {
+                if (_options.TaskTimeout.HasValue)
+                {
+                    using (timeoutCts = new CancellationTokenSource(_options.TaskTimeout.Value))
+                    {
+                        using (var linkedCts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken, timeoutCts.Token))
+                        {
+                            await _task(linkedCts.Token).ConfigureAwait(false);
+                        }
+                    }
+                }
+                else
+                {
+                    await _task(cancellationToken).ConfigureAwait(false);
+                }
+
+                stop = Stopwatch.GetTimestamp();
+                status = InternalConstants.Success;
+            }
+            catch (OperationCanceledException)
+            {
+                stop = Stopwatch.GetTimestamp();
+
+                if (timeoutCts?.Token.IsCancellationRequested == true)
+                {
+                    InternalLogs.ExecuteException(_logger, taskUniqueId, InternalConstants.TaskTimedOut);
+                    status = InternalConstants.Failure;
+                }
+                else
+                {
+                    InternalLogs.ExecuteException(_logger, taskUniqueId, InternalConstants.TaskCanceled);
+                    status = InternalConstants.Failure;
+                }
+            }
+            catch (Exception ex)
+            {
+                stop = Stopwatch.GetTimestamp();
+                InternalLogs.ExecuteException(_logger, taskUniqueId, ex);
+                status = InternalConstants.Failure;
+            }
+         
+            InternalLogs.TaskCompletedWithNext(_logger, taskUniqueId, status, InternalHelpers.GetElapsedMilliseconds(start, stop), NextTaskAt.Value, null);
+
+            IsExecuting = false;
+
+            _semaphore.Release();
+
+            if (_options.PreservePeriod)
+            {
+                NextTaskAt = DateTime.UtcNow.Add(_options.Period);
+                _timer?.Change(_options.Period, Timeout.InfiniteTimeSpan);
+            }
         }
     }
 }
