@@ -12,6 +12,8 @@ Ogu.Extensions.Hosting.HostedServices extends the `IHostedService` interface and
 
 - `TimedHostedService` class for running tasks with timed execution intervals.
 
+- `QueueHostedService` class for running tasks by processing items from a queue asynchronously as they are added.
+
 ## Installation
 
 You can install the library via NuGet Package Manager:
@@ -20,38 +22,100 @@ You can install the library via NuGet Package Manager:
 dotnet add package Ogu.Extensions.Hosting.HostedServices
 ```
 
-## Usage
-
-**SettingsTimedHostedService:**
-```csharp
-public class SettingsTimedHostedService : TimedHostedService
-{
-    private readonly SettingsLocalService _service;
-
-    public SettingsTimedHostedServices(ILogger<SettingsTimedHostedServices> logger, SettingsLocalService service, IOptions<SettingsConfiguration> settingsConfiguration) : base(logger, TimeSpan.Parse(settingsConfiguration.Value.Worker.Period), TimeSpan.Parse(settingsConfiguration.Value.Worker.StartsIn))
-    {
-        _service = service;
-    }
-
-    protected override Task ExecuteAsync(CancellationToken cancellationToken)
-    {
-        return _service.ReloadAsync(cancellationToken);
-    }
-}
-```
+## TimedHostedService Usage 
 
 **Registration:**
 ```csharp
-services.AddHostedServices<SettingsTimedHostedService>();
+services.AddHostedService(sp =>
+{
+    var logger = sp.GetRequiredService<ILogger<TimedHostedService>>();
+
+    return new TimedHostedService(logger, ExecuteAsync,
+        opts =>
+        {
+            opts.StartsIn = TimeSpan.FromSeconds(5);
+            opts.Period = TimeSpan.FromSeconds(5);
+            opts.TaskTimeout = TimeSpan.FromSeconds(8);
+        });
+
+    ValueTask ExecuteAsync(CancellationToken c)
+    {
+        logger.LogInformation("************   Hey there! I'm working.   ************");
+
+        return ValueTask.CompletedTask;
+    }
+});
 ```
 
 Output =>
 
 ```bash
-[2024-05-16T20:53:09.7608330Z-Dev-inf]: Ogu.Settings.Services.SettingsTimedHostedService
-                                        Worker will start at: 2024-05-16T20:53:24.7574562Z and occur every 0:00:00:15.0000000 period. Maximum concurrently active jobs: 1
-[2024-05-16T20:53:24.7864910Z-Dev-inf]: Ogu.Settings.Services.SettingsTimedHostedService
-                                        Worker is executing the task
-[2024-05-16T20:53:24.9255878Z-Dev-inf]: Ogu.Settings.Services.SettingsTimedHostedService
-                                        Worker has executed the task in 134.811ms, next task at: 2024-05-16T20:53:39.9215909Z
+[28-12-2024T22:52:15.5558831+01:00]-info: Ogu.Extensions.Hosting.HostedServices.TimedHostedService[1]
+      Worker is scheduled to start at:2024-12-28T21:52:20.5499759Z and occur every 0:00:00:05.0000000 period.
+[28-12-2024T22:52:20.6032080+01:00]-info: Ogu.Extensions.Hosting.HostedServices.TimedHostedService[3]
+      Task @T-1735422740597-@Thread-5 started.
+[28-12-2024T22:52:20.6083551+01:00]-info: Ogu.Extensions.Hosting.HostedServices.TimedHostedService[0]
+      ************   Hey there! I'm working.   ************
+[28-12-2024T22:52:20.6165092+01:00]-info: Ogu.Extensions.Hosting.HostedServices.TimedHostedService[4]
+      Task @T-1735422740597-@Thread-5 completed with status: success in 4.7972ms, next task at: 2024-12-28T21:52:25.5959966Z.
 ```
+
+## QueueHostedService Usage
+
+**Registration:**
+```csharp
+builder.Services.AddSingleton<ITaskQueueFactory, TaskQueueFactory>();
+
+builder.Services.AddHostedService(sp =>
+{
+    var taskQueueFactory = sp.GetRequiredService<ITaskQueueFactory>();
+
+    var taskQueue = taskQueueFactory.GetOrCreate("my-queue", new BoundedChannelOptions(10));
+
+    return new TaskQueueHostedService(sp.GetRequiredService<ILogger<TaskQueueHostedService>>(), taskQueue);
+});
+```
+
+**Basic usage:**
+
+```csharp
+app.MapGet("/queues/names", (ITaskQueueFactory taskQueueFactory) => taskQueueFactory.GetQueueNames());
+
+app.MapPost("/queues/{queueName}", async (string queueName, ILogger<Program> logger, ITaskQueueFactory taskQueueFactory, CancellationToken cancellationToken) =>
+{
+    var taskQueue = taskQueueFactory.GetOrCreate(queueName, new BoundedChannelOptions(10));
+
+    await taskQueue.QueueTaskAsync((cancellation) =>
+    {
+        logger.LogInformation("Hey hey hey");
+
+        return new ValueTask(Task.Delay(5000, cancellation));
+
+    }, cancellationToken);
+
+    return Results.Ok();
+});
+```
+
+Output =>
+
+```bash
+[28-12-2024T23:14:14.2906716+01:00]-info: Ogu.Extensions.Hosting.HostedServices.TaskQueueHostedService[1]
+      Worker started.
+[28-12-2024T23:14:24.8109179+01:00]-info: Ogu.Extensions.Hosting.HostedServices.TaskQueueHostedService[3]
+      Task @T-1735424054321-@Thread-1 started.
+[28-12-2024T23:14:24.8132472+01:00]-info: Program[0]
+      Hey hey hey
+[28-12-2024T23:14:29.8306265+01:00]-info: Ogu.Extensions.Hosting.HostedServices.TaskQueueHostedService[4]
+      Task @T-1735424054321-@Thread-1 completed with status: success in 5007.4033ms.
+[28-12-2024T23:14:29.8398904+01:00]-info: Ogu.Extensions.Hosting.HostedServices.TaskQueueHostedService[3]
+      Task @T-1735424069838-@Thread-16 started.
+[28-12-2024T23:14:29.8465989+01:00]-info: Program[0]
+      Hey hey hey
+```
+
+## Sample Application
+
+A sample application demonstrating the usage of **TimedHostedService** can be found [here](https://github.com/ogulcanturan/Ogu.Extensions.Hosting.HostedServices/tree/master/samples/TimedWorker).
+
+A sample application demonstrating the usage of **QueueHostedService** can be found [here](https://github.com/ogulcanturan/Ogu.Extensions.Hosting.HostedServices/tree/master/samples/QueueWorker).
