@@ -3,8 +3,8 @@
 namespace Ogu.Extensions.Hosting.HostedServices
 {
     /// <summary>
-    ///     Provides methods for managing and accessing task queues.
-    ///     The <see cref="ITaskQueueFactory"/> allows for the creation, retrieval, and inspection of task queues by name.
+    /// Provides methods for managing and accessing task queues.
+    /// The <see cref="ITaskQueueFactory"/> allows for the creation, retrieval, and inspection of task queues by name.
     /// </summary>
     public interface ITaskQueueFactory
     {

@@ -25,7 +25,7 @@ builder.Services.AddHostedService(sp =>
 
     var taskQueue = taskQueueFactory.GetOrCreate("my-queue", new BoundedChannelOptions(10));
 
-    return new TaskQueueHostedService(sp.GetRequiredService<ILogger<TaskQueueHostedService>>(), taskQueue);
+    return new TaskQueueHostedService(sp.GetRequiredService<ILogger<TaskQueueHostedService>>(), "QueueWorker", taskQueue);
 });
 
 var app = builder.Build();

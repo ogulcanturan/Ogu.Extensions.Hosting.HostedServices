@@ -5,9 +5,9 @@ using System.Threading.Channels;
 namespace Ogu.Extensions.Hosting.HostedServices
 {
     /// <summary>
-    ///     A concrete implementation of the <see cref="ITaskQueueFactory"/> interface.
-    ///     Provides methods for managing and accessing task queues, including creating, retrieving, 
-    ///     and checking the existence of task queues by name.
+    /// A concrete implementation of the <see cref="ITaskQueueFactory"/> interface.
+    /// Provides methods for managing and accessing task queues, including creating, retrieving, 
+    /// and checking the existence of task queues by name.
     /// </summary>
     public sealed class TaskQueueFactory : ITaskQueueFactory
     {

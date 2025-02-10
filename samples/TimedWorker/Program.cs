@@ -23,7 +23,7 @@ hostBuilder.ConfigureServices(services =>
     {
         var logger = sp.GetRequiredService<ILogger<TimedHostedService>>();
 
-        return new TimedHostedService(logger, ExecuteAsync,
+        return new TimedHostedService(logger, "Logging", ExecuteAsync,
             opts =>
             {
                 opts.StartsIn = TimeSpan.FromSeconds(5);

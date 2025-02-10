@@ -18,49 +18,49 @@ namespace Ogu.Extensions.Hosting.HostedServices
             public static readonly EventId SkippingTask = new EventId(9, "SkippingTask");
         }
 
-        public static readonly Action<ILogger, Exception> WorkerStarted = LoggerMessage.Define(
+        public static readonly Action<ILogger, string, Exception> WorkerStarted = LoggerMessage.Define<string>(
             LogLevel.Information,
             EventIds.WorkerStarted,
-            "Worker started.");
+            "{Worker} started.");
 
-        public static readonly Action<ILogger, DateTime, TimeSpan, Exception> WorkerStartPlanned = LoggerMessage.Define<DateTime, TimeSpan>(
+        public static readonly Action<ILogger, string, DateTime, TimeSpan, Exception> WorkerStartPlanned = LoggerMessage.Define<string, DateTime, TimeSpan>(
             LogLevel.Information,
             EventIds.WorkerStarted,
-            "Worker is scheduled to start at:{DateTime:o} and occur every {Period:G} period.");
+            "{Worker} is scheduled to start at:{DateTime:o} and occur every {Period:G} period.");
 
-        public static readonly Action<ILogger, string, Exception> TaskStarted = LoggerMessage.Define<string>(
+        public static readonly Action<ILogger, string, string, Exception> TaskStarted = LoggerMessage.Define<string, string>(
             LogLevel.Information,
             EventIds.TaskStarted,
-            "Task {TaskUniqueId} started.");
+            "{Worker} task {TaskUniqueId} started.");
 
-        public static readonly Action<ILogger, string, string, double, Exception> TaskCompleted = LoggerMessage.Define<string, string, double>(
+        public static readonly Action<ILogger, string, string, string, double, Exception> TaskCompleted = LoggerMessage.Define<string, string, string, double>(
             LogLevel.Information,
             EventIds.TaskCompleted,
-            "Task {TaskUniqueId} completed with status: {Status} in {Elapsed}ms.");
+            "{Worker} task {TaskUniqueId} completed with status: {Status} in {Elapsed}ms.");
 
-        public static readonly Action<ILogger, string, string, double, DateTime, Exception> TaskCompletedWithNext = LoggerMessage.Define<string, string, double, DateTime>(
+        public static readonly Action<ILogger, string, string, string, double, DateTime, Exception> TaskCompletedWithNext = LoggerMessage.Define<string, string, string, double, DateTime>(
             LogLevel.Information,
             EventIds.TaskCompleted,
-            "Task {TaskUniqueId} completed with status: {Status} in {Elapsed}ms, next task at: {NextTaskAt:o}.");
+            "{Worker} task {TaskUniqueId} completed with status: {Status} in {Elapsed}ms, next task at: {NextTaskAt:o}.");
 
-        public static readonly Action<ILogger, Exception> WorkerStopping = LoggerMessage.Define(
+        public static readonly Action<ILogger, string, Exception> WorkerStopping = LoggerMessage.Define<string>(
             LogLevel.Information,
             EventIds.WorkerStopped,
-            "Worker is stopping...........");
+            "{Worker} is stopping...........");
 
-        public static readonly Action<ILogger, Exception> WorkerStopped = LoggerMessage.Define(
+        public static readonly Action<ILogger, string, Exception> WorkerStopped = LoggerMessage.Define<string>(
             LogLevel.Information,
             EventIds.WorkerStopped,
-            "Worker stopped.");
+            "{Worker} stopped.");
 
-        public static readonly Action<ILogger, string, Exception> ExecuteException = LoggerMessage.Define<string>(
+        public static readonly Action<ILogger, string, string, Exception> ExecuteException = LoggerMessage.Define<string, string>(
             LogLevel.Error,
             EventIds.ExecuteException,
-            "Worker caught an exception while executing the task {TaskUniqueId}");
+            "{Worker} caught an exception while executing the task {TaskUniqueId}");
 
-        public static readonly Action<ILogger, Exception> SkippingTask = LoggerMessage.Define(
+        public static readonly Action<ILogger, string, Exception> SkippingTask = LoggerMessage.Define<string>(
             LogLevel.Information,
             EventIds.SkippingTask,
-            "Skipping task execution because another task is currently running.");
+            "{Worker} skipping task execution because another task is currently running.");
     }
 }

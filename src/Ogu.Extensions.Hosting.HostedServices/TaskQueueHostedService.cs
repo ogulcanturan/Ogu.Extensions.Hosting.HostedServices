@@ -9,8 +9,8 @@ using System.Threading.Tasks;
 namespace Ogu.Extensions.Hosting.HostedServices
 {
     /// <summary>
-    ///     A background service that processes tasks from a queue asynchronously.
-    ///     Implements <see cref="IHostedService"/> to run as a hosted service and manage task execution from the queue.
+    /// A background service that processes tasks from a queue asynchronously.
+    /// Implements <see cref="IHostedService"/> to run as a hosted service and manage task execution from the queue.
     /// </summary>
     public class TaskQueueHostedService : IHostedService
     {
@@ -19,12 +19,21 @@ namespace Ogu.Extensions.Hosting.HostedServices
         private bool _disposed;
 
         private readonly ILogger _logger;
+        private readonly string _worker;
         private readonly ITaskQueue _taskQueue;
         private readonly TaskQueueHostedServiceOptions _options;
 
-        public TaskQueueHostedService(ILogger logger, ITaskQueue taskQueue, Action<TaskQueueHostedServiceOptions> options = null)
+        /// <summary>
+        /// Initializes a new instance of the <see cref="TaskQueueHostedService"/> class.
+        /// </summary>
+        /// <param name="logger">The logger instance used to log messages for the service.</param>
+        /// <param name="worker">The name of the worker, used for identifying the service instance.</param>
+        /// <param name="taskQueue">The <see cref="ITaskQueue"/> instance that represents the task queue to be processed by the service.</param>
+        /// <param name="options">An optional action to configure the options for the task queue hosted service.</param>
+        public TaskQueueHostedService(ILogger logger, string worker, ITaskQueue taskQueue, Action<TaskQueueHostedServiceOptions> options = null)
         {
             _logger = logger ?? new NullLogger<TaskQueueHostedService>();
+            _worker = worker;
             _taskQueue = taskQueue;
             _options = new TaskQueueHostedServiceOptions();
             options?.Invoke(_options);
@@ -35,7 +44,7 @@ namespace Ogu.Extensions.Hosting.HostedServices
 
         public virtual Task StartAsync(CancellationToken cancellationToken)
         {
-            InternalLogs.WorkerStarted(_logger, null);
+            InternalLogs.WorkerStarted(_logger, _worker, null);
 
             HasStarted = true;
 
@@ -48,7 +57,7 @@ namespace Ogu.Extensions.Hosting.HostedServices
 
         public virtual async Task StopAsync(CancellationToken cancellationToken)
         {
-            InternalLogs.WorkerStopping(_logger, null);
+            InternalLogs.WorkerStopping(_logger, _worker, null);
 
             if (_executingTask == null)
             {
@@ -77,7 +86,7 @@ namespace Ogu.Extensions.Hosting.HostedServices
 #endif
                 HasStarted = false;
 
-                InternalLogs.WorkerStopped(_logger, null);
+                InternalLogs.WorkerStopped(_logger, _worker, null);
             }
         }
 
@@ -112,7 +121,7 @@ namespace Ogu.Extensions.Hosting.HostedServices
                 {
                     var task = await _taskQueue.DequeueTaskAsync(cancellationToken).ConfigureAwait(false);
 
-                    InternalLogs.TaskStarted(_logger, taskUniqueId, null);
+                    InternalLogs.TaskStarted(_logger, _worker, taskUniqueId, null);
 
                     start = Stopwatch.GetTimestamp();
 
@@ -142,17 +151,17 @@ namespace Ogu.Extensions.Hosting.HostedServices
                 {
                     stop = Stopwatch.GetTimestamp();
 
-                    InternalLogs.ExecuteException(_logger, taskUniqueId, InternalConstants.TaskCanceled);
+                    InternalLogs.ExecuteException(_logger, _worker, taskUniqueId, InternalConstants.TaskCanceled);
                     status = InternalConstants.Failure;
                 }
                 catch (Exception ex)
                 {
                     stop = Stopwatch.GetTimestamp();
-                    InternalLogs.ExecuteException(_logger, taskUniqueId, ex);
+                    InternalLogs.ExecuteException(_logger, _worker, taskUniqueId, ex);
                     status = InternalConstants.Failure;
                 }
 
-                InternalLogs.TaskCompleted(_logger, taskUniqueId, status, start == 0 ? 0 : InternalHelpers.GetElapsedMilliseconds(start, stop), null);
+                InternalLogs.TaskCompleted(_logger, _worker, taskUniqueId, status, start == 0 ? 0 : InternalHelpers.GetElapsedMilliseconds(start, stop), null);
 
                 IsExecuting = false;
             }
