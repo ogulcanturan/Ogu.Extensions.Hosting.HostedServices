@@ -30,7 +30,7 @@ services.AddHostedService(sp =>
 {
     var logger = sp.GetRequiredService<ILogger<TimedHostedService>>();
 
-    return new TimedHostedService(logger, ExecuteAsync,
+    return new TimedHostedService(logger, "TimedWorker", ExecuteAsync,
         opts =>
         {
             opts.StartsIn = TimeSpan.FromSeconds(5);
@@ -51,13 +51,13 @@ Output =>
 
 ```bash
 [28-12-2024T22:52:15.5558831+01:00]-info: Ogu.Extensions.Hosting.HostedServices.TimedHostedService[1]
-      Worker is scheduled to start at:2024-12-28T21:52:20.5499759Z and occur every 0:00:00:05.0000000 period.
+      TimedWorker is scheduled to start at:2024-12-28T21:52:20.5499759Z and occur every 0:00:00:05.0000000 period.
 [28-12-2024T22:52:20.6032080+01:00]-info: Ogu.Extensions.Hosting.HostedServices.TimedHostedService[3]
-      Task @T-1735422740597-@Thread-5 started.
+      TimedWorker task @T-1735422740597-@Thread-5 started.
 [28-12-2024T22:52:20.6083551+01:00]-info: Ogu.Extensions.Hosting.HostedServices.TimedHostedService[0]
       ************   Hey there! I'm working.   ************
 [28-12-2024T22:52:20.6165092+01:00]-info: Ogu.Extensions.Hosting.HostedServices.TimedHostedService[4]
-      Task @T-1735422740597-@Thread-5 completed with status: success in 4.7972ms, next task at: 2024-12-28T21:52:25.5959966Z.
+      TimedWorker task @T-1735422740597-@Thread-5 completed with status: success in 4.7972ms, next task at: 2024-12-28T21:52:25.5959966Z.
 ```
 
 ## QueueHostedService Usage
@@ -70,7 +70,7 @@ builder.Services.AddHostedService(sp =>
 {
     var taskQueueFactory = sp.GetRequiredService<ITaskQueueFactory>();
 
-    var taskQueue = taskQueueFactory.GetOrCreate("my-queue", new BoundedChannelOptions(10));
+    var taskQueue = taskQueueFactory.GetOrCreate("my-queue", "QueueWorker", new BoundedChannelOptions(10));
 
     return new TaskQueueHostedService(sp.GetRequiredService<ILogger<TaskQueueHostedService>>(), taskQueue);
 });
@@ -101,15 +101,15 @@ Output =>
 
 ```bash
 [28-12-2024T23:14:14.2906716+01:00]-info: Ogu.Extensions.Hosting.HostedServices.TaskQueueHostedService[1]
-      Worker started.
+      QueueWorker started.
 [28-12-2024T23:14:24.8109179+01:00]-info: Ogu.Extensions.Hosting.HostedServices.TaskQueueHostedService[3]
-      Task @T-1735424054321-@Thread-1 started.
+      QueueWorker Task @T-1735424054321-@Thread-1 started.
 [28-12-2024T23:14:24.8132472+01:00]-info: Program[0]
       Hey hey hey
 [28-12-2024T23:14:29.8306265+01:00]-info: Ogu.Extensions.Hosting.HostedServices.TaskQueueHostedService[4]
-      Task @T-1735424054321-@Thread-1 completed with status: success in 5007.4033ms.
+      QueueWorker task @T-1735424054321-@Thread-1 completed with status: success in 5007.4033ms.
 [28-12-2024T23:14:29.8398904+01:00]-info: Ogu.Extensions.Hosting.HostedServices.TaskQueueHostedService[3]
-      Task @T-1735424069838-@Thread-16 started.
+      QueueWorker task @T-1735424069838-@Thread-16 started.
 [28-12-2024T23:14:29.8465989+01:00]-info: Program[0]
       Hey hey hey
 ```
