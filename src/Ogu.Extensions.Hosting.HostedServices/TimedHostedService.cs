@@ -1,5 +1,4 @@
-﻿using Microsoft.Extensions.Hosting;
-using Microsoft.Extensions.Logging;
+﻿using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
 using System;
 using System.Diagnostics;
@@ -10,18 +9,20 @@ namespace Ogu.Extensions.Hosting.HostedServices
 {
     /// <summary>
     /// Represents a background service that executes tasks at regular, timed intervals.
-    /// Implements <see cref="IHostedService"/> to provide background task execution
+    /// Implements <see cref="ITimedHostedService"/> to provide background task execution
     /// and <see cref="IDisposable"/> for proper cleanup of resources.
     /// </summary>
-    public class TimedHostedService : IHostedService, IDisposable
+    public class TimedHostedService : ITimedHostedService, IDisposable
     {
         private Timer _timer;
         private Task _executingTask;
         private CancellationTokenSource _stoppingCts;
         private bool _disposed;
+        private bool _periodUpdated;
 
         private readonly SemaphoreSlim _semaphore = new SemaphoreSlim(1, 1);
-        private readonly Func<CancellationToken, ValueTask> _task;
+        private readonly object _lock = new object();
+        private readonly Func<ITimedHostedService, CancellationToken, ValueTask> _task;
         private readonly ILogger _logger;
         private readonly string _worker;
         private readonly TimedHostedServiceOptions _options;
@@ -37,9 +38,27 @@ namespace Ogu.Extensions.Hosting.HostedServices
         {
             _logger = logger ?? new NullLogger<TimedHostedService>();
             _worker = worker;
+            _task = (timedHostedService, cancellationToken) => task(cancellationToken);
+            _options = new TimedHostedServiceOptions();
+            options?.Invoke(_options);
+            _options.OnPropertyChanged += OnPropertyChanged;
+        }
+
+        /// <summary>
+        /// Initializes a new instance of the <see cref="TimedHostedService"/> class.
+        /// </summary>
+        /// <param name="logger">The logger instance used to log messages for the service.</param>
+        /// <param name="worker">The name of the worker, used for identifying the service instance.</param>
+        /// <param name="task">A function that takes <see cref="ITimedHostedService"/> and <see cref="CancellationToken"/> then returns a <see cref="ValueTask"/> to be executed by the worker.</param>
+        /// <param name="options">An optional action to configure the options for the timed hosted service.</param>
+        public TimedHostedService(ILogger logger, string worker, Func<ITimedHostedService, CancellationToken, ValueTask> task, Action<TimedHostedServiceOptions> options = null)
+        {
+            _logger = logger ?? new NullLogger<TimedHostedService>();
+            _worker = worker;
             _task = task;
             _options = new TimedHostedServiceOptions();
             options?.Invoke(_options);
+            _options.OnPropertyChanged += OnPropertyChanged;
         }
 
         public virtual bool IsExecuting { get; private set; }
@@ -96,6 +115,14 @@ namespace Ogu.Extensions.Hosting.HostedServices
             }
         }
 
+        public void UpdateOptions(Action<TimedHostedServiceOptions> updateAction)
+        {
+            lock (_lock)
+            {
+                updateAction(_options);
+            }
+        }
+
         public void Dispose()
         {
             Dispose(true);
@@ -108,6 +135,7 @@ namespace Ogu.Extensions.Hosting.HostedServices
             {
                 _stoppingCts?.Cancel();
                 _timer?.Dispose();
+                _options.OnPropertyChanged -= OnPropertyChanged;
             }
 
             _disposed = true;
@@ -143,13 +171,13 @@ namespace Ogu.Extensions.Hosting.HostedServices
                     {
                         using (var linkedCts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken, timeoutCts.Token))
                         {
-                            await _task(linkedCts.Token).ConfigureAwait(false);
+                            await _task(this, linkedCts.Token).ConfigureAwait(false);
                         }
                     }
                 }
                 else
                 {
-                    await _task(cancellationToken).ConfigureAwait(false);
+                    await _task(this, cancellationToken).ConfigureAwait(false);
                 }
 
                 stop = Stopwatch.GetTimestamp();
@@ -162,13 +190,13 @@ namespace Ogu.Extensions.Hosting.HostedServices
                 if (timeoutCts?.Token.IsCancellationRequested == true)
                 {
                     InternalLogs.ExecuteException(_logger, _worker, taskUniqueId, InternalConstants.TaskTimedOut);
-                    status = InternalConstants.Failure;
                 }
                 else
                 {
                     InternalLogs.ExecuteException(_logger, _worker, taskUniqueId, InternalConstants.TaskCanceled);
-                    status = InternalConstants.Failure;
                 }
+
+                status = InternalConstants.Failure;
             }
             catch (Exception ex)
             {
@@ -176,8 +204,10 @@ namespace Ogu.Extensions.Hosting.HostedServices
                 InternalLogs.ExecuteException(_logger, _worker, taskUniqueId, ex);
                 status = InternalConstants.Failure;
             }
-         
-            InternalLogs.TaskCompletedWithNext(_logger, _worker, taskUniqueId, status, InternalHelpers.GetElapsedMilliseconds(start, stop), NextTaskAt.Value, null);
+
+            var elapsedMilliseconds = InternalHelpers.GetElapsedMilliseconds(start, stop);
+
+            InternalLogs.TaskCompletedWithNext(_logger, _worker, taskUniqueId, status, elapsedMilliseconds, NextTaskAt.Value, null);
 
             IsExecuting = false;
 
@@ -187,6 +217,33 @@ namespace Ogu.Extensions.Hosting.HostedServices
             {
                 NextTaskAt = DateTime.UtcNow.Add(_options.Period);
                 _timer?.Change(_options.Period, Timeout.InfiniteTimeSpan);
+            }
+            else if(_periodUpdated)
+            {
+                var dueTime = _options.Period.Add(TimeSpan.FromMilliseconds(elapsedMilliseconds));
+
+                NextTaskAt = DateTime.UtcNow.Add(dueTime);
+                _timer?.Change(dueTime, _options.Period);
+
+                _periodUpdated = false;
+            }
+        }
+
+        private void OnPropertyChanged(string propertyName)
+        {
+            switch (propertyName)
+            {
+                case nameof(TimedHostedServiceOptions.StartsIn) when !HasStarted && NextTaskAt == null:
+
+                    _timer?.Change(_options.StartsIn, _options.Period);
+
+                    break;
+
+                case nameof(TimedHostedServiceOptions.Period) when !_options.PreservePeriod:
+
+                    _periodUpdated = true;
+
+                    break;
             }
         }
     }

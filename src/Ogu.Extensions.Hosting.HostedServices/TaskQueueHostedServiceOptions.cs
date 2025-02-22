@@ -10,6 +10,7 @@ namespace Ogu.Extensions.Hosting.HostedServices
         /// <summary>
         /// Gets or sets the maximum time allowed for the task to complete.
         /// If the task does not complete within this time, it will trigger the cancellation.
+        /// If set to <c>null</c> (default), the timeout is not enabled, and the task can run indefinitely.
         /// </summary>
         public TimeSpan? TaskTimeout { get; set; }
     }

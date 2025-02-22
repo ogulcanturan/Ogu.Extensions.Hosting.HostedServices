@@ -31,7 +31,7 @@ hostBuilder.ConfigureServices(services =>
                 opts.TaskTimeout = TimeSpan.FromSeconds(8);
             });
 
-        ValueTask ExecuteAsync(CancellationToken c)
+        ValueTask ExecuteAsync(ITimedHostedService timedHostedService, CancellationToken c)
         {
             logger.LogInformation("************   Hey there! I'm working.   ************");
 

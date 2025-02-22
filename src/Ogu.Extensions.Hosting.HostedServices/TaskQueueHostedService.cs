@@ -1,5 +1,4 @@
-﻿using Microsoft.Extensions.Hosting;
-using Microsoft.Extensions.Logging;
+﻿using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
 using System;
 using System.Diagnostics;
@@ -10,14 +9,15 @@ namespace Ogu.Extensions.Hosting.HostedServices
 {
     /// <summary>
     /// A background service that processes tasks from a queue asynchronously.
-    /// Implements <see cref="IHostedService"/> to run as a hosted service and manage task execution from the queue.
+    /// Implements <see cref="ITaskQueueHostedService"/> to run as a hosted service and manage task execution from the queue.
     /// </summary>
-    public class TaskQueueHostedService : IHostedService
+    public class TaskQueueHostedService : ITaskQueueHostedService
     {
         private Task _executingTask;
         private CancellationTokenSource _stoppingCts;
         private bool _disposed;
 
+        private readonly object _lock = new object();
         private readonly ILogger _logger;
         private readonly string _worker;
         private readonly ITaskQueue _taskQueue;
@@ -87,6 +87,14 @@ namespace Ogu.Extensions.Hosting.HostedServices
                 HasStarted = false;
 
                 InternalLogs.WorkerStopped(_logger, _worker, null);
+            }
+        }
+
+        public void UpdateOptions(Action<TaskQueueHostedServiceOptions> updateAction)
+        {
+            lock (_lock)
+            {
+                updateAction(_options);
             }
         }
 
