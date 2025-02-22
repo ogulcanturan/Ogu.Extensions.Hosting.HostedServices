@@ -103,7 +103,7 @@ Output =>
 [28-12-2024T23:14:14.2906716+01:00]-info: Ogu.Extensions.Hosting.HostedServices.TaskQueueHostedService[1]
       QueueWorker started.
 [28-12-2024T23:14:24.8109179+01:00]-info: Ogu.Extensions.Hosting.HostedServices.TaskQueueHostedService[3]
-      QueueWorker Task @T-1735424054321-@Thread-1 started.
+      QueueWorker task @T-1735424054321-@Thread-1 started.
 [28-12-2024T23:14:24.8132472+01:00]-info: Program[0]
       Hey hey hey
 [28-12-2024T23:14:29.8306265+01:00]-info: Ogu.Extensions.Hosting.HostedServices.TaskQueueHostedService[4]
