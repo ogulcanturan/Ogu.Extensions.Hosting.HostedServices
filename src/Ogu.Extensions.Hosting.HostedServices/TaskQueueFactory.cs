@@ -15,6 +15,18 @@ namespace Ogu.Extensions.Hosting.HostedServices
 
         public int Count => _queueNameToTaskQueue.Count;
 
+        public bool TryAdd(string queueName, BoundedChannelOptions opts)
+        {
+            if (_queueNameToTaskQueue.ContainsKey(queueName))
+            {
+                return false;
+            }
+
+            _queueNameToTaskQueue[queueName] = new TaskQueue(opts);
+
+            return true;
+        }
+
         public ITaskQueue Get(string queueName)
         {
             return _queueNameToTaskQueue.TryGetValue(queueName, out var taskQueue) ? taskQueue : null;

@@ -14,15 +14,25 @@ namespace Ogu.Extensions.Hosting.HostedServices
         int Count { get; }
 
         /// <summary>
-        ///     Retrieves the task queue with the specified name.
-        ///     If the queue does not exist, it returns <c>null</c>.
+        /// Attempts to add a new queue with the specified name and bounded channel options.
+        /// </summary>
+        /// <param name="queueName">The name of the queue to be added.</param>
+        /// <param name="opts">The bounded channel options that configure the queue's behavior.</param>
+        /// <returns>
+        /// <c>true</c> if the queue was successfully added; otherwise, <c>false</c>.
+        /// </returns>
+        bool TryAdd(string queueName, BoundedChannelOptions opts);
+
+        /// <summary>
+        /// Retrieves the task queue with the specified name.
+        /// If the queue does not exist, it returns <c>null</c>.
         /// </summary>
         /// <param name="queueName">The name of the queue to retrieve.</param>
         /// <returns>The <see cref="ITaskQueue"/> associated with the given name, or <c>null</c> if not found.</returns>
         ITaskQueue Get(string queueName);
 
         /// <summary>
-        ///     Retrieves an existing task queue by name, or creates a new one with the specified options if it does not exist.
+        /// Retrieves an existing task queue by name, or creates a new one with the specified options if it does not exist.
         /// </summary>
         /// <param name="queueName">The name of the queue.</param>
         /// <param name="opts">The options for the new queue if it is created.</param>
@@ -30,14 +40,14 @@ namespace Ogu.Extensions.Hosting.HostedServices
         ITaskQueue GetOrCreate(string queueName, BoundedChannelOptions opts);
 
         /// <summary>
-        ///     Checks whether a task queue with the specified name exists.
+        /// Checks whether a task queue with the specified name exists.
         /// </summary>
         /// <param name="queueName">The name of the queue to check.</param>
         /// <returns><c>true</c> if a queue with the specified name exists; otherwise, <c>false</c>.</returns>
         bool Contains(string queueName);
 
         /// <summary>
-        ///     Gets the names of all task queues currently managed by the factory.
+        /// Gets the names of all task queues currently managed by the factory.
         /// </summary>
         /// <returns>An array of queue names.</returns>
         string[] GetQueueNames();
