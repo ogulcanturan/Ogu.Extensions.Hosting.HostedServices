@@ -74,6 +74,19 @@ builder.Services.AddHostedService(sp =>
 
     return new TaskQueueHostedService(sp.GetRequiredService<ILogger<TaskQueueHostedService>>(), taskQueue);
 });
+
+// (Optional) - To add multiple queued hosted services use below
+foreach(var _ in Enumerable.Range(0,2))
+{
+    services.AddSingleton<IHostedService>(sp => 
+    {  
+        var taskQueueFactory = sp.GetRequiredService<ITaskQueueFactory>();
+
+        var taskQueue = taskQueueFactory.GetOrCreate("my-queue", "QueueWorker", new BoundedChannelOptions(10));
+
+        return new TaskQueueHostedService(sp.GetRequiredService<ILogger<TaskQueueHostedService>>(), taskQueue);
+    });
+}
 ```
 
 **Basic usage:**
