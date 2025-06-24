@@ -53,7 +53,7 @@ namespace Ogu.Extensions.Hosting.HostedServices
             EventIds.WorkerStopped,
             "{Worker} stopped.");
 
-        public static readonly Action<ILogger, string, string, Exception> ExecuteException = LoggerMessage.Define<string, string>(
+        public static readonly Action<ILogger, string, string, Exception> CaughtAnException = LoggerMessage.Define<string, string>(
             LogLevel.Error,
             EventIds.ExecuteException,
             "{Worker} caught an exception while executing the task {TaskUniqueId}");

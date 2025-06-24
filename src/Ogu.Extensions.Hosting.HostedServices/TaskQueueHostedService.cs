@@ -13,7 +13,7 @@ namespace Ogu.Extensions.Hosting.HostedServices
     /// </summary>
     public class TaskQueueHostedService : ITaskQueueHostedService
     {
-        private Task _executingTask;
+        private ValueTask _executingTask;
         private CancellationTokenSource _stoppingCts;
         private bool _disposed;
 
@@ -44,7 +44,10 @@ namespace Ogu.Extensions.Hosting.HostedServices
 
         public virtual Task StartAsync(CancellationToken cancellationToken)
         {
-            InternalLogs.WorkerStarted(_logger, _worker, null);
+            if (_options.LogOptions.LogWhenWorkerStarted)
+            {
+                InternalLogs.WorkerStarted(_logger, _worker, null);
+            }
 
             HasStarted = true;
 
@@ -57,9 +60,14 @@ namespace Ogu.Extensions.Hosting.HostedServices
 
         public virtual async Task StopAsync(CancellationToken cancellationToken)
         {
-            InternalLogs.WorkerStopping(_logger, _worker, null);
+            if (_options.LogOptions.LogWhenWorkerStopping)
+            {
+                InternalLogs.WorkerStopping(_logger, _worker, null);
+            }
 
-            if (_executingTask == null)
+            var executingTask = _executingTask.AsTask();
+
+            if (executingTask == null)
             {
                 return;
             }
@@ -71,7 +79,7 @@ namespace Ogu.Extensions.Hosting.HostedServices
             finally
             {
 #if NET8_0_OR_GREATER
-                await _executingTask.WaitAsync(cancellationToken).ConfigureAwait(ConfigureAwaitOptions.SuppressThrowing);
+                await executingTask.WaitAsync(cancellationToken).ConfigureAwait(ConfigureAwaitOptions.SuppressThrowing);
 #else
                 // Wait until the task completes or the stop token triggers
                 var tcs = new TaskCompletionSource<object>();
@@ -81,12 +89,15 @@ namespace Ogu.Extensions.Hosting.HostedServices
                 using (var registration = cancellationToken.Register(s => ((TaskCompletionSource<object>)s).SetCanceled(), tcs))
                 {
                     // Do not await the _executeTask because cancelling it will throw an OperationCanceledException which we are explicitly ignoring
-                    await Task.WhenAny(_executingTask, tcs.Task).ConfigureAwait(false);
+                    await Task.WhenAny(executingTask, tcs.Task).ConfigureAwait(false);
                 }
 #endif
                 HasStarted = false;
 
-                InternalLogs.WorkerStopped(_logger, _worker, null);
+                if (_options.LogOptions.LogWhenWorkerStopped)
+                {
+                    InternalLogs.WorkerStopped(_logger, _worker, null);
+                }
             }
         }
 
@@ -114,7 +125,7 @@ namespace Ogu.Extensions.Hosting.HostedServices
             _disposed = true;
         }
 
-        private async Task DoWorkAsync(CancellationToken cancellationToken)
+        private async ValueTask DoWorkAsync(CancellationToken cancellationToken)
         {
             while (!_stoppingCts.IsCancellationRequested)
             {
@@ -129,7 +140,10 @@ namespace Ogu.Extensions.Hosting.HostedServices
                 {
                     var task = await _taskQueue.DequeueTaskAsync(cancellationToken).ConfigureAwait(false);
 
-                    InternalLogs.TaskStarted(_logger, _worker, taskUniqueId, null);
+                    if (_options.LogOptions.LogWhenTaskStarted)
+                    {
+                        InternalLogs.TaskStarted(_logger, _worker, taskUniqueId, null);
+                    }
 
                     start = Stopwatch.GetTimestamp();
 
@@ -139,7 +153,7 @@ namespace Ogu.Extensions.Hosting.HostedServices
                         {
                             using (var linkedCts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken, timeoutCts.Token))
                             {
-                                _executingTask = task(linkedCts.Token).AsTask();
+                                _executingTask = task(linkedCts.Token);
 
                                 await _executingTask.ConfigureAwait(false);
                             }
@@ -147,7 +161,7 @@ namespace Ogu.Extensions.Hosting.HostedServices
                     }
                     else
                     {
-                        _executingTask = task(cancellationToken).AsTask();
+                        _executingTask = task(cancellationToken);
 
                         await _executingTask.ConfigureAwait(false);
                     }
@@ -159,17 +173,29 @@ namespace Ogu.Extensions.Hosting.HostedServices
                 {
                     stop = Stopwatch.GetTimestamp();
 
-                    InternalLogs.ExecuteException(_logger, _worker, taskUniqueId, InternalConstants.TaskCanceled);
+                    if (_options.LogOptions.LogWhenCaughtAnException)
+                    {
+                        InternalLogs.CaughtAnException(_logger, _worker, taskUniqueId, InternalConstants.TaskCanceled);
+                    }
+
                     status = InternalConstants.Failure;
                 }
                 catch (Exception ex)
                 {
                     stop = Stopwatch.GetTimestamp();
-                    InternalLogs.ExecuteException(_logger, _worker, taskUniqueId, ex);
+
+                    if (_options.LogOptions.LogWhenCaughtAnException)
+                    {
+                        InternalLogs.CaughtAnException(_logger, _worker, taskUniqueId, ex);
+                    }
+
                     status = InternalConstants.Failure;
                 }
 
-                InternalLogs.TaskCompleted(_logger, _worker, taskUniqueId, status, start == 0 ? 0 : InternalHelpers.GetElapsedMilliseconds(start, stop), null);
+                if (_options.LogOptions.LogWhenTaskCompleted)
+                {
+                    InternalLogs.TaskCompleted(_logger, _worker, taskUniqueId, status, start == 0 ? 0 : InternalHelpers.GetElapsedMilliseconds(start, stop), null);
+                }
 
                 IsExecuting = false;
             }

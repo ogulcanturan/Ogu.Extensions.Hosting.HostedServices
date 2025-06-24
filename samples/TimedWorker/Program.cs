@@ -3,6 +3,7 @@ using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Console;
 using Ogu.Extensions.Hosting.HostedServices;
+using TimedWorker;
 
 var hostBuilder = Host.CreateDefaultBuilder(args);
 
@@ -29,6 +30,13 @@ hostBuilder.ConfigureServices(services =>
                 opts.StartsIn = TimeSpan.FromSeconds(5);
                 opts.Period = TimeSpan.FromSeconds(5);
                 opts.TaskTimeout = TimeSpan.FromSeconds(8);
+                opts.LogOptions.LogWhenWorkerStartPlanned = true;
+                opts.LogOptions.LogWhenTaskStarted = false;
+                opts.LogOptions.LogWhenTaskCompleted = false;
+                opts.LogOptions.LogWhenWorkerStopping = false;
+                opts.LogOptions.LogWhenWorkerStopped = false;
+                opts.LogOptions.LogWhenCaughtAnException = false;
+                opts.LogOptions.LogWhenSkippingTask = false;
             });
 
         ValueTask ExecuteAsync(ITimedHostedService timedHostedService, CancellationToken c)
@@ -38,6 +46,8 @@ hostBuilder.ConfigureServices(services =>
             return ValueTask.CompletedTask;
         }
     });
+
+    services.AddHostedService<CustomTimedService>();
 });
 
 var host = hostBuilder.Build();

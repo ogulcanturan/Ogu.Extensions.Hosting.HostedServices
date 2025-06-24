@@ -13,5 +13,10 @@ namespace Ogu.Extensions.Hosting.HostedServices
         /// If set to <c>null</c> (default), the timeout is not enabled, and the task can run indefinitely.
         /// </summary>
         public TimeSpan? TaskTimeout { get; set; }
+
+        /// <summary>
+        /// Gets or sets the logging options for the task queue hosted service.
+        /// </summary>
+        public TaskQueueHostedServiceLogOptions LogOptions { get; set; } = new TaskQueueHostedServiceLogOptions();
     }
 }

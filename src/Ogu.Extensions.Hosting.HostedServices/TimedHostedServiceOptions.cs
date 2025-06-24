@@ -96,5 +96,10 @@ namespace Ogu.Extensions.Hosting.HostedServices
                 OnPropertyChanged?.Invoke(nameof(PreservePeriod));
             }
         }
+
+        /// <summary>
+        /// Gets or sets the logging options for the timed hosted service.
+        /// </summary>
+        public TimedHostedServiceLogOptions LogOptions { get; set; } = new TimedHostedServiceLogOptions();
     }
 }

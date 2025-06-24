@@ -15,7 +15,7 @@ namespace Ogu.Extensions.Hosting.HostedServices
     public class TimedHostedService : ITimedHostedService, IDisposable
     {
         private Timer _timer;
-        private Task _executingTask;
+        private ValueTask _executingTask;
         private CancellationTokenSource _stoppingCts;
         private bool _disposed;
         private bool _periodUpdated;
@@ -23,9 +23,25 @@ namespace Ogu.Extensions.Hosting.HostedServices
         private readonly SemaphoreSlim _semaphore = new SemaphoreSlim(1, 1);
         private readonly object _lock = new object();
         private readonly Func<ITimedHostedService, CancellationToken, ValueTask> _task;
-        private readonly ILogger _logger;
         private readonly string _worker;
         private readonly TimedHostedServiceOptions _options;
+
+        protected readonly ILogger Logger;
+
+        /// <summary>
+        /// Initializes a new instance of the <see cref="TimedHostedService"/> class.
+        /// </summary>
+        /// <param name="logger">The logger instance used to log messages for the service.</param>
+        /// <param name="worker">The name of the worker, used for identifying the service instance.</param>
+        /// <param name="options">An optional action to configure the options for the timed hosted service.</param>
+        protected TimedHostedService(ILogger logger, string worker, Action<TimedHostedServiceOptions> options = null)
+        {
+            Logger = logger ?? new NullLogger<TimedHostedService>();
+            _worker = worker;
+            _options = new TimedHostedServiceOptions();
+            options?.Invoke(_options);
+            _options.OnPropertyChanged += OnPropertyChanged;
+        }
 
         /// <summary>
         /// Initializes a new instance of the <see cref="TimedHostedService"/> class.
@@ -36,7 +52,7 @@ namespace Ogu.Extensions.Hosting.HostedServices
         /// <param name="options">An optional action to configure the options for the timed hosted service.</param>
         public TimedHostedService(ILogger logger, string worker, Func<CancellationToken, ValueTask> task, Action<TimedHostedServiceOptions> options = null)
         {
-            _logger = logger ?? new NullLogger<TimedHostedService>();
+            Logger = logger ?? new NullLogger<TimedHostedService>();
             _worker = worker;
             _task = (timedHostedService, cancellationToken) => task(cancellationToken);
             _options = new TimedHostedServiceOptions();
@@ -53,7 +69,7 @@ namespace Ogu.Extensions.Hosting.HostedServices
         /// <param name="options">An optional action to configure the options for the timed hosted service.</param>
         public TimedHostedService(ILogger logger, string worker, Func<ITimedHostedService, CancellationToken, ValueTask> task, Action<TimedHostedServiceOptions> options = null)
         {
-            _logger = logger ?? new NullLogger<TimedHostedService>();
+            Logger = logger ?? new NullLogger<TimedHostedService>();
             _worker = worker;
             _task = task;
             _options = new TimedHostedServiceOptions();
@@ -67,22 +83,30 @@ namespace Ogu.Extensions.Hosting.HostedServices
 
         public virtual Task StartAsync(CancellationToken cancellationToken)
         {
-            InternalLogs.WorkerStartPlanned(_logger, _worker, DateTime.UtcNow.Add(_options.StartsIn), _options.Period, null);
+            if (_options.LogOptions.LogWhenWorkerStartPlanned)
+            {
+                InternalLogs.WorkerStartPlanned(Logger, _worker, DateTime.UtcNow.Add(_options.StartsIn), _options.Period, null);
+            }
 
             HasStarted = true;
 
             _stoppingCts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
 
-            _timer = new Timer(x => _executingTask = DoWorkAsync(x, _stoppingCts.Token), null, _options.StartsIn, _options.Period);
+            _timer = new Timer(x => _executingTask = PrivateWorkAsync(x, _stoppingCts.Token), null, _options.StartsIn, _options.Period);
 
             return Task.CompletedTask;
         }
 
         public virtual async Task StopAsync(CancellationToken cancellationToken)
         {
-            InternalLogs.WorkerStopping(_logger, _worker, null);
+            if (_options.LogOptions.LogWhenWorkerStopping)
+            {
+                InternalLogs.WorkerStopping(Logger, _worker, null);
+            }
 
-            if (_executingTask == null)
+            var executingTask = _executingTask.AsTask();
+
+            if (executingTask == null)
             {
                 return;
             }
@@ -95,7 +119,7 @@ namespace Ogu.Extensions.Hosting.HostedServices
             finally
             {
 #if NET8_0_OR_GREATER
-                await _executingTask.WaitAsync(cancellationToken).ConfigureAwait(ConfigureAwaitOptions.SuppressThrowing);
+                await executingTask.WaitAsync(cancellationToken).ConfigureAwait(ConfigureAwaitOptions.SuppressThrowing);
 #else
                 // Wait until the task completes or the stop token triggers
                 var tcs = new TaskCompletionSource<object>();
@@ -105,13 +129,16 @@ namespace Ogu.Extensions.Hosting.HostedServices
                 using (var registration = cancellationToken.Register(s => ((TaskCompletionSource<object>)s).SetCanceled(), tcs))
                 {
                     // Do not await the _executeTask because cancelling it will throw an OperationCanceledException which we are explicitly ignoring
-                    await Task.WhenAny(_executingTask, tcs.Task).ConfigureAwait(false);
+                    await Task.WhenAny(executingTask, tcs.Task).ConfigureAwait(false);
                 }
 #endif
                 HasStarted = false;
                 NextTaskAt = null;
 
-                InternalLogs.WorkerStopped(_logger, _worker, null);
+                if (_options.LogOptions.LogWhenWorkerStopped)
+                {
+                    InternalLogs.WorkerStopped(Logger, _worker, null);
+                }
             }
         }
 
@@ -141,20 +168,43 @@ namespace Ogu.Extensions.Hosting.HostedServices
             _disposed = true;
         }
 
-        private async Task DoWorkAsync(object state, CancellationToken cancellationToken)
+        /// <summary>
+        /// Executes the work of the timed hosted service.
+        /// </summary>
+        /// <param name="cancellationToken">The cancellation token to cancel the operation.</param>
+        /// <returns>
+        /// A <see cref="ValueTask"/> representing the operation. It may complete synchronously.
+        /// </returns>
+        protected virtual async ValueTask DoWorkAsync(CancellationToken cancellationToken)
+        {
+            if (_task == null)
+            {
+                return;
+            }
+
+            await _task(this, cancellationToken).ConfigureAwait(false);
+        }
+
+        private async ValueTask PrivateWorkAsync(object state, CancellationToken cancellationToken)
         {
             NextTaskAt = DateTime.UtcNow.Add(_options.Period);
 
             if (IsExecuting || !await _semaphore.WaitAsync(0, cancellationToken))
             {
-                InternalLogs.SkippingTask(_logger, _worker, null);
+                if (_options.LogOptions.LogWhenSkippingTask)
+                {
+                    InternalLogs.SkippingTask(Logger, _worker, null);
+                }
 
                 return;
             }
 
             var taskUniqueId = InternalHelpers.GetTaskUniqueId();
 
-            InternalLogs.TaskStarted(_logger, _worker, taskUniqueId, null);
+            if (_options.LogOptions.LogWhenTaskStarted)
+            {
+                InternalLogs.TaskStarted(Logger, _worker, taskUniqueId, null);
+            }
 
             IsExecuting = true;
 
@@ -171,13 +221,13 @@ namespace Ogu.Extensions.Hosting.HostedServices
                     {
                         using (var linkedCts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken, timeoutCts.Token))
                         {
-                            await _task(this, linkedCts.Token).ConfigureAwait(false);
+                            await DoWorkAsync(linkedCts.Token).ConfigureAwait(false);
                         }
                     }
                 }
                 else
                 {
-                    await _task(this, cancellationToken).ConfigureAwait(false);
+                    await DoWorkAsync(cancellationToken).ConfigureAwait(false);
                 }
 
                 stop = Stopwatch.GetTimestamp();
@@ -189,11 +239,14 @@ namespace Ogu.Extensions.Hosting.HostedServices
 
                 if (timeoutCts?.Token.IsCancellationRequested == true)
                 {
-                    InternalLogs.ExecuteException(_logger, _worker, taskUniqueId, InternalConstants.TaskTimedOut);
+                    if (_options.LogOptions.LogWhenCaughtAnException)
+                    {
+                        InternalLogs.CaughtAnException(Logger, _worker, taskUniqueId, InternalConstants.TaskTimedOut);
+                    }
                 }
-                else
+                else if (_options.LogOptions.LogWhenCaughtAnException)
                 {
-                    InternalLogs.ExecuteException(_logger, _worker, taskUniqueId, InternalConstants.TaskCanceled);
+                    InternalLogs.CaughtAnException(Logger, _worker, taskUniqueId, InternalConstants.TaskCanceled);
                 }
 
                 status = InternalConstants.Failure;
@@ -201,13 +254,21 @@ namespace Ogu.Extensions.Hosting.HostedServices
             catch (Exception ex)
             {
                 stop = Stopwatch.GetTimestamp();
-                InternalLogs.ExecuteException(_logger, _worker, taskUniqueId, ex);
+
+                if (_options.LogOptions.LogWhenCaughtAnException)
+                {
+                    InternalLogs.CaughtAnException(Logger, _worker, taskUniqueId, ex);
+                }
+
                 status = InternalConstants.Failure;
             }
 
             var elapsedMilliseconds = InternalHelpers.GetElapsedMilliseconds(start, stop);
 
-            InternalLogs.TaskCompletedWithNext(_logger, _worker, taskUniqueId, status, elapsedMilliseconds, NextTaskAt.Value, null);
+            if (_options.LogOptions.LogWhenTaskCompleted)
+            {
+                InternalLogs.TaskCompletedWithNext(Logger, _worker, taskUniqueId, status, elapsedMilliseconds, NextTaskAt.Value, null);
+            }
 
             IsExecuting = false;
 
@@ -218,7 +279,7 @@ namespace Ogu.Extensions.Hosting.HostedServices
                 NextTaskAt = DateTime.UtcNow.Add(_options.Period);
                 _timer?.Change(_options.Period, Timeout.InfiniteTimeSpan);
             }
-            else if(_periodUpdated)
+            else if (_periodUpdated)
             {
                 var dueTime = _options.Period.Add(TimeSpan.FromMilliseconds(elapsedMilliseconds));
 
