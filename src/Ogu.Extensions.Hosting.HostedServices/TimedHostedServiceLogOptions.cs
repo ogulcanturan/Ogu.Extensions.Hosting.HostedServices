@@ -47,5 +47,21 @@
         /// </summary>
         /// <remarks>Default is <c>true</c></remarks>
         public bool LogWhenSkippingTask { get; set; } = true;
+
+        /// <summary>
+        /// Logs when the worker is already started.
+        /// </summary>
+        /// <remarks>Default is <c>true</c></remarks>
+        public bool LogWhenWorkerHasAlreadyStarted { get; set; } = true;
+
+        /// <summary>
+        /// Logs when the worker is starting after being disposed.
+        /// </summary>
+        public bool LogWhenStartingDisposedWorker { get; set; } = true;
+
+        /// <summary>
+        /// Logs when the worker is stopping after being disposed.
+        /// </summary>
+        public bool LogWhenStoppingDisposedWorker { get; set; } = true;
     }
 }

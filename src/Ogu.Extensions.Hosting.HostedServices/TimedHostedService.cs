@@ -83,6 +83,26 @@ namespace Ogu.Extensions.Hosting.HostedServices
 
         public virtual Task StartAsync(CancellationToken cancellationToken)
         {
+            if (_disposed)
+            {
+                if (_options.LogOptions.LogWhenStartingDisposedWorker)
+                {
+                    InternalLogs.StartingDisposedWorker(Logger, _worker, null);
+                }
+
+                return Task.CompletedTask;
+            }
+
+            if (HasStarted)
+            {
+                if (_options.LogOptions.LogWhenWorkerHasAlreadyStarted)
+                {
+                    InternalLogs.WorkerHasAlreadyStarted(Logger, _worker, null);
+                }
+
+                return Task.CompletedTask;
+            }
+
             if (_options.LogOptions.LogWhenWorkerStartPlanned)
             {
                 InternalLogs.WorkerStartPlanned(Logger, _worker, DateTime.UtcNow.Add(_options.StartsIn), _options.Period, null);
@@ -92,13 +112,30 @@ namespace Ogu.Extensions.Hosting.HostedServices
 
             _stoppingCts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
 
-            _timer = new Timer(x => _executingTask = PrivateWorkAsync(x, _stoppingCts.Token), null, _options.StartsIn, _options.Period);
+            if (_timer == null)
+            {
+                _timer = new Timer(x => _executingTask = PrivateWorkAsync(x, _stoppingCts.Token), null, _options.StartsIn, _options.Period);
+            }
+            else
+            {
+                _timer.Change(_options.StartsIn, _options.Period);
+            }
 
             return Task.CompletedTask;
         }
 
         public virtual async Task StopAsync(CancellationToken cancellationToken)
         {
+            if (_disposed)
+            {
+                if (_options.LogOptions.LogWhenStoppingDisposedWorker)
+                {
+                    InternalLogs.StoppingDisposedWorker(Logger, _worker, null);
+                }
+
+                return;
+            }
+
             if (_options.LogOptions.LogWhenWorkerStopping)
             {
                 InternalLogs.WorkerStopping(Logger, _worker, null);

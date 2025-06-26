@@ -44,6 +44,26 @@ namespace Ogu.Extensions.Hosting.HostedServices
 
         public virtual Task StartAsync(CancellationToken cancellationToken)
         {
+            if (_disposed)
+            {
+                if (_options.LogOptions.LogWhenStartingDisposedWorker)
+                {
+                    InternalLogs.StartingDisposedWorker(_logger, _worker, null);
+                }
+
+                return Task.CompletedTask;
+            }
+
+            if (HasStarted)
+            {
+                if (_options.LogOptions.LogWhenWorkerHasAlreadyStarted)
+                {
+                    InternalLogs.WorkerHasAlreadyStarted(_logger, _worker, null);
+                }
+
+                return Task.CompletedTask;
+            }
+
             if (_options.LogOptions.LogWhenWorkerStarted)
             {
                 InternalLogs.WorkerStarted(_logger, _worker, null);
@@ -60,6 +80,16 @@ namespace Ogu.Extensions.Hosting.HostedServices
 
         public virtual async Task StopAsync(CancellationToken cancellationToken)
         {
+            if (_disposed)
+            {
+                if (_options.LogOptions.LogWhenStoppingDisposedWorker)
+                {
+                    InternalLogs.StoppingDisposedWorker(_logger, _worker, null);
+                }
+
+                return;
+            }
+
             if (_options.LogOptions.LogWhenWorkerStopping)
             {
                 InternalLogs.WorkerStopping(_logger, _worker, null);
